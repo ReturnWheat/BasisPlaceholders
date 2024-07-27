@@ -1,1 +1,7 @@
-
+name: BasisPlaceholders
+version: '${project.version}'
+main: com.basisplaceholders.BasisPlaceholders
+api-version: 1.12
+depend: [PlaceholderAPI]
+description: Basic placeholder extensions, e.g. get the day of the week the current date is, the time remaining for the day, the time remaining until the next Monday, the number of days the player is offline, the amount of space left in the inventory, etc.
+authors: [ "Wheat" ]
