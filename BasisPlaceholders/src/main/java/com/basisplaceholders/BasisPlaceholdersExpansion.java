@@ -1,142 +1,136 @@
 package com.basisplaceholders;
 
-import org.bukkit.Bukkit;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.entity.Player;
-import org.bukkit.event.EventHandler;
-import org.bukkit.event.Listener;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
+import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.text.SimpleDateFormat;
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
-public class BasisPlaceholders extends JavaPlugin implements Listener {
+public class BasisPlaceholdersExpansion extends PlaceholderExpansion {
 
-    private File dataFolder;
-    private boolean debugMode; // 调试模式开关
+    private final BasisPlaceholders plugin;
 
-    // 用于存储玩家数据
-    private final Map<String, FileConfiguration> playerData = new HashMap<>();
-
-    @Override
-    public void onEnable() {
-        getLogger().warning("");
-        getLogger().warning("\u001B[32mBasisPlaceholders 插件已加载\u001B[31m");
-        getLogger().warning("\u001B[32m作者: Wheat QQ: 2743063754\u001B[31m");
-        getLogger().warning("");
-        // 保存默认配置文件（如果不存在则创建）
-        saveDefaultConfig();
-        // 加载配置文件
-        FileConfiguration config = getConfig();
-        debugMode = config.getBoolean("debug-mode", false); // 从配置文件读取调试模式开关
-
-        // 创建数据文件夹
-        dataFolder = new File(getDataFolder(), "data");
-        if (!dataFolder.exists()) {
-            dataFolder.mkdirs();
-        }
-
-        // 注册事件
-        Bukkit.getPluginManager().registerEvents(this, this);
-
-        // 注册 PlaceholderAPI 的占位符
-        if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
-            new BasisPlaceholdersExpansion(this).register();
-        } else {
-            getLogger().warning("\u001B[31mBasisPlaceholders 插件已卸载\u001B[31m");
-            getLogger().warning("\u001B[31m因为没有前置 PlaceholderAPI 置插，版本至少是 2.11.2 以上。\u001B[31m");
-            Bukkit.getPluginManager().disablePlugin(this); // 卸载插件
-        }
-
-        // 启动定时任务，每分钟保存一次所有在线玩家的数据
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                saveAllPlayerData();
-            }
-        }.runTaskTimer(this, 0, 1200); // 1200 ticks = 1 minute
+    public BasisPlaceholdersExpansion(BasisPlaceholders plugin) {
+        this.plugin = plugin;
     }
 
     @Override
-    public void onDisable() {
-        getLogger().warning("\u001B[31mBasisPlaceholders 插件已卸载，用户数据已保存！\u001B[31m");
-        saveAllPlayerData(); // 在插件禁用时保存所有玩家数据
+    public @NotNull String getIdentifier() {
+        return "bpe";
     }
 
-    private File getPlayerDataFile(Player player) {
-        return new File(dataFolder, player.getUniqueId() + ".yml");
+    @Override
+    public @NotNull String getAuthor() {
+        return "Wheat";
     }
 
-    private void loadPlayerData(Player player) {
-        File playerFile = getPlayerDataFile(player);
-        if (playerFile.exists()) {
-            FileConfiguration config = YamlConfiguration.loadConfiguration(playerFile);
-            playerData.put(player.getUniqueId().toString(), config);
-            if (debugMode) getLogger().info("已加载 " + player.getName() + " 的数据");
-        } else {
-            // 如果文件不存在，创建一个新的数据
-            FileConfiguration config = new YamlConfiguration();
-            config.set("lastOnline", System.currentTimeMillis());
-            config.set("offlineDays", 0);
-            playerData.put(player.getUniqueId().toString(), config);
-            savePlayerData(player); // 保存新创建的数据
+    @Override
+    public @NotNull String getVersion() {
+        return plugin.getDescription().getVersion();
+    }
+
+    @Override
+    public boolean persist() {
+        return true;
+    }
+
+    @Override
+    public String onPlaceholderRequest(Player player, @NotNull String identifier) {
+        if (player == null) {
+            return null;
+        }
+
+        switch (identifier) {
+//          case "last_online":
+//              return String.valueOf(plugin.getLastOnlineTime(player) / 1000); // 转换为秒
+            case "last_online":
+                return getLastOnlineTimeFormatted(player);
+            case "offline_days":
+                return String.valueOf(plugin.getOfflineDays(player));
+            case "current_day":
+                return getCurrentDay();
+            case "current_day_en":
+                return getCurrentDayInEnglish();
+            case "seconds_to_next_day":
+                return String.valueOf(getSecondsToNextDay());
+            case "minutes_to_next_day":
+                return String.valueOf(getMinutesToNextDay());
+            case "hours_to_next_day":
+                return String.valueOf(getHoursToNextDay());
+            case "remaining_inventory_slots":
+                return String.valueOf(getRemainingInventorySlots(player));
+            case "seconds_to_next_monday":
+                return String.valueOf(getSecondsToNextMonday());
+            case "minutes_to_next_monday":
+                return String.valueOf(getMinutesToNextMonday());
+            case "hours_to_next_monday":
+                return String.valueOf(getHoursToNextMonday());
+            case "days_to_next_monday":
+                return String.valueOf(getDaysToNextMonday());
+            default:
+                return null; // 返回 null 表示未识别的占位符
         }
     }
 
-    private void savePlayerData(Player player) {
-        File playerFile = getPlayerDataFile(player);
-        FileConfiguration config = playerData.get(player.getUniqueId().toString());
-        if (config != null) {
-            long lastOnlineTime = System.currentTimeMillis();
-            config.set("lastOnline", lastOnlineTime);
-            config.set("offlineDays", calculateOfflineDays(lastOnlineTime, config.getLong("lastOnline")));
-            try {
-                config.save(playerFile);
-                if (debugMode) getLogger().info("已保存 " + player.getName() + " 的数据到 " + playerFile.getName());
-            } catch (IOException e) {
-                getLogger().severe("无法保存 " + player.getName() + " 的数据！");
-                e.printStackTrace();
-            }
-        }
+    private String getLastOnlineTimeFormatted(Player player) {
+        long lastOnline = plugin.getLastOnlineTime(player);
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        return sdf.format(new Date(lastOnline));
     }
 
-    private void saveAllPlayerData() {
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            savePlayerData(player);
-        }
+    private String getCurrentDay() {
+        SimpleDateFormat sdf = new SimpleDateFormat("EEEE", Locale.getDefault());
+        return sdf.format(new Date());
     }
 
-    private long calculateOfflineDays(long currentTime, long lastOnlineTime) {
-        long difference = currentTime - lastOnlineTime;
-        return difference / (1000 * 60 * 60 * 24); // 转换为天数
+    private String getCurrentDayInEnglish() {
+        SimpleDateFormat sdf = new SimpleDateFormat("EEEE", Locale.ENGLISH);
+        return sdf.format(new Date());
     }
 
-    @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        loadPlayerData(player); // 加载玩家数据
+    private long getSecondsToNextDay() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextMidnight = now.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        return Duration.between(now, nextMidnight).getSeconds();
     }
 
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        savePlayerData(player); // 保存玩家数据
-        playerData.remove(player.getUniqueId().toString()); // 移除数据引用以便垃圾回收
-        if (debugMode) getLogger().info("已移除 " + player.getName() + " 的数据引用");
+    private long getMinutesToNextDay() {
+        return TimeUnit.SECONDS.toMinutes(getSecondsToNextDay());
     }
 
-    public long getLastOnlineTime(Player player) {
-        FileConfiguration config = playerData.get(player.getUniqueId().toString());
-        return config != null ? config.getLong("lastOnline") : System.currentTimeMillis();
+    private long getHoursToNextDay() {
+        return TimeUnit.SECONDS.toHours(getSecondsToNextDay());
     }
 
-    public long getOfflineDays(Player player) {
-        return calculateOfflineDays(System.currentTimeMillis(), getLastOnlineTime(player));
+    private int getRemainingInventorySlots(Player player) {
+        return (int) Arrays.stream(player.getInventory().getStorageContents()).filter(Objects::isNull).count();
+    }
+
+    private long getSecondsToNextMonday() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime nextMonday = now.with(TemporalAdjusters.next(DayOfWeek.MONDAY)).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        return Duration.between(now, nextMonday).getSeconds();
+    }
+
+    private long getMinutesToNextMonday() {
+        return TimeUnit.SECONDS.toMinutes(getSecondsToNextMonday());
+    }
+
+    private long getHoursToNextMonday() {
+        return TimeUnit.SECONDS.toHours(getSecondsToNextMonday());
+    }
+
+    private long getDaysToNextMonday() {
+        return TimeUnit.SECONDS.toDays(getSecondsToNextMonday());
     }
 }
+
